@@ -1,0 +1,90 @@
+services:
+  loki:
+    image: grafana/loki:3.0.0
+    user: "root"
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki-config.yaml:/etc/loki/local-config.yaml
+      - loki-data:/tmp/loki                  # <--- PERSISTS LOG DATA
+    command: -config.file=/etc/loki/local-config.yaml
+
+  grafana:
+    image: grafana/grafana:11.0.0
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana        # <--- PERSISTS ORGS & USERS
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - loki
+
+  alloy:
+    image: grafana/alloy:v1.1.0
+    user: "root"
+    ports:
+      - "12345:12345"
+      - "514:514/udp"
+    volumes:
+      - ./config.alloy:/etc/alloy/config.alloy
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    command: run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/tmp/alloy /etc/alloy/config.alloy
+    depends_on:
+      - loki
+
+  flog-tenant-a:
+    image: alpine:3.20
+    command:
+      - /bin/sh
+      - -c
+      - |
+        while true; do
+          printf '%s\n' "{\"tenant\":\"tenant-a\",\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"message\":\"tenant-a generated log: tenant-a\"}"
+          sleep 1
+        done
+
+  flog-tenant-b:
+    image: alpine:3.20
+    command:
+      - /bin/sh
+      - -c
+      - |
+        while true; do
+          printf '%s\n' "{\"tenant\":\"tenant-b\",\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"message\":\"tenant-b generated log: tenant-b\"}"
+          sleep 1
+        done
+
+
+  # De metric generator (Avalanche)
+  avalanche:
+    image: quay.io/prometheuscommunity/avalanche:latest
+    container_name: avalanche_generator
+    ports:
+      - "9101:9101"
+    command:
+      - --counter-metric-count=20    # Aantal counter metrieken
+      - --gauge-metric-count=20      # Aantal gauge metrieken
+      - --series-count=10            # Aantal unieke tijdseries per metriek
+      - --value-interval=15          # Wijzig data elke 15 seconden
+      - --port=9101
+    restart: unless-stopped
+  
+  # Prometheus om de metrics op te vangen en te bekijken
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus_server
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    depends_on:
+      - avalanche
+    restart: unless-stopped
+
+
+# Declare the named volumes at the bottom of the file
+volumes:
+  loki-data:
+  grafana-data:
+  prometheus-data:

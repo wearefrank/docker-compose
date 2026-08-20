@@ -1,0 +1,7 @@
+global:
+  scrape_interval: 5s # Scrape de metrics elke 5 seconden voor snelle testdata
+
+scrape_configs:
+  - job_name: 'avalanche-mock-data'
+    static_configs:
+      - targets: ['avalanche:9101'] # Verwijst naar de service-naam uit de docker-compose

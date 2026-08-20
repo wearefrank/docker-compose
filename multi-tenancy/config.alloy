@@ -1,0 +1,50 @@
+// 1. Zoek direct naar alle fysieke .log bestanden in de Docker container-map
+local.file_match "docker_logs" {
+  path_targets = [{"__path__" = "/var/lib/docker/containers/*/*.log"}]
+}
+
+// 2. Scrape de logs rechtstreeks van de schijf
+loki.source.file "scrape_logs" {
+  targets    = local.file_match.docker_logs.targets
+  forward_to = [loki.process.tenant_routing.receiver]
+}
+
+// 3. De Sorteermachine: filter en label op basis van de ECHTE log-inhoud
+loki.process "tenant_routing" {
+  // Docker log lines are JSON. We parse the embedded log payload.
+  stage.json {
+    expressions = { "logline" = "log" }
+  }
+
+  // Extract the tenant from the log payload itself.
+  stage.regex {
+    source     = "logline"
+    expression = ".*(?P<tenant>tenant-[a-z]).*"
+  }
+
+  // Drop records that do not contain a tenant value.
+  stage.drop {
+    source    = "tenant"
+    expression = "^$"
+  }
+
+  // Set the tenant as a Loki label and use it as the X-Scope-OrgID.
+  stage.labels {
+    values = {
+      tenant = "tenant",
+    }
+  }
+
+  stage.tenant {
+    label = "tenant"
+  }
+
+  forward_to = [loki.write.multitenant_loki.receiver]
+}
+
+// 4. Stuur door naar Loki
+loki.write "multitenant_loki" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
