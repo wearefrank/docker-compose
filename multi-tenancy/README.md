@@ -15,4 +15,4 @@ This setup uses Docker Compose to simulate a multi-tenant observability pipeline
 1. Save all generated configuration files into the same directory.
 1. Run `docker compose up -d`.
 1. Open Grafana at `http://localhost:3000` (User: `admin` / Pass: `admin`).
-1. [Setup your grafana](/docs/setup.md) 
+1. [Setup grafana orgs](docs/setup.md) 
